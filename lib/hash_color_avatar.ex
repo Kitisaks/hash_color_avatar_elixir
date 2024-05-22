@@ -30,7 +30,7 @@ defmodule HashColorAvatar do
   """
 
   def random_color(options \\ []) do
-    seed = Enum.random(1..359)
+    seed = :rand.uniform(359)
     saturation = Keyword.get(options, :saturation, @default_saturation)
     value = Keyword.get(options, :value, @default_value)
     hsv_to_rgb(%{hue: seed, saturation: saturation, value: value}) |> rgb_to_hex
@@ -118,7 +118,7 @@ defmodule HashColorAvatar do
   ## Examples
 
       iex> HashColorAvatar.gen_avatar("")
-      ~c'<svg width="100" height="100"><circle cx="50.0" cy="50.0" r="50.0" stroke="white" stroke-width="4" fill="pastel" /><text fill="white" x="50%" y="67%" text-anchor="middle" style="font: bold 41.66666666666667px sans-serif;" >VK</text></circle></svg>'
+      ~c{<svg width="100" height="100"><circle cx="50.0" cy="50.0" r="50.0" stroke="white" stroke-width="4" fill="pastel" /><text fill="white" x="50%" y="67%" text-anchor="middle" style="font: bold 41.66666666666667px sans-serif;" >VK</text></circle></svg>}
 
   ## Option
   **:color** can be used to specify background color. By default it will generate hash based on the text given. It will be unique-ish since there are only 359 possible color and there's a chance it looks similar one amongst the other. For the value you can choose "random", any color code recognized by CSS such as "teal", "tomato", also it accept hex code.
@@ -130,7 +130,7 @@ defmodule HashColorAvatar do
   ## Examples
 
       iex> HashColorAvatar.gen_avatar("Samantha Johnson Abigail", [color: "tomato", shape: "rect", size: 200])
-      ~c'<svg width="200" height="200"><rect width="200" height="200" fill="tomato" /><text fill="white" x="50%" y="65%" text-anchor="middle" style="font: bold 83.33333333333334px sans-serif;" >SA</text></circle></svg>'
+      ~c{<svg width="200" height="200"><rect width="200" height="200" fill="tomato" /><text fill="white" x="50%" y="65%" text-anchor="middle" style="font: bold 83.33333333333334px sans-serif;" >SA</text></circle></svg>}
 
 
   """
@@ -156,10 +156,10 @@ defmodule HashColorAvatar do
 
     case shape do
       "rect" ->
-        ~c'<svg width="#{size}" height="#{size}"><rect width="#{size}" height="#{size}" fill="#{background_color}" /><text fill="white" x="50%" y="65%" text-anchor="middle" style="font: bold #{fontsize}px sans-serif;" >#{get_initial(text)}</text></circle></svg>'
+        ~c{<svg width="#{size}" height="#{size}"><rect width="#{size}" height="#{size}" fill="#{background_color}" /><text fill="white" x="50%" y="65%" text-anchor="middle" style="font: bold #{fontsize}px sans-serif;" >#{get_initial(text)}</text></circle></svg>}
 
       _other ->
-        ~c'<svg width="#{size}" height="#{size}"><circle cx="#{diameter}" cy="#{diameter}" r="#{diameter}" stroke="white" stroke-width="4" fill="#{background_color}" /><text fill="white" x="50%" y="67%" text-anchor="middle" style="font: bold #{fontsize}px sans-serif;" >#{get_initial(text)}</text></circle></svg>'
+        ~c{<svg width="#{size}" height="#{size}"><circle cx="#{diameter}" cy="#{diameter}" r="#{diameter}" stroke="white" stroke-width="4" fill="#{background_color}" /><text fill="white" x="50%" y="67%" text-anchor="middle" style="font: bold #{fontsize}px sans-serif;" >#{get_initial(text)}</text></circle></svg>}
     end
   end
 
