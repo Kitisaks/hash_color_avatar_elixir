@@ -5,7 +5,7 @@ defmodule HashColorAvatar.MixProject do
     [
       app: :hash_color_avatar,
       version: "0.1.0",
-      elixir: "~> 1.7",
+      elixir: "~> 1.14",
       description:
         "A simple SVG initial avatar generator with pastel color generated from string hash.",
       start_permanent: Mix.env() == :prod,

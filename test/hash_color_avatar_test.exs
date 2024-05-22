@@ -27,11 +27,11 @@ defmodule HashColorAvatarTest do
   end
 
   test "test create avatar 2 name" do
-    assert HashColorAvatar.gen_avatar("Marlyn Monroe") == '<svg width="100" height="100"><circle cx="50.0" cy="50.0" r="50.0" stroke="white" stroke-width="4" fill="pastel" /><text fill="white" x="50%" y="67%" text-anchor="middle" style="font: bold 41.66666666666667px sans-serif;" >MM</text></circle></svg>'
-  end 
+    assert HashColorAvatar.gen_avatar("Marlyn Monroe") == ~c'<svg width="100" height="100"><circle cx="50.0" cy="50.0" r="50.0" stroke="white" stroke-width="4" fill="pastel" /><text fill="white" x="50%" y="67%" text-anchor="middle" style="font: bold 41.66666666666667px sans-serif;" >MM</text></circle></svg>'
+  end
 
   test "test create avatar 5 name option rectangle" do
-    assert HashColorAvatar.gen_avatar("Sagit Putri Lestari Harum Mewangi", [shape: "rect"]) == '<svg width="100" height="100"><rect width="100" height="100" fill="pastel" /><text fill="white" x="50%" y="65%" text-anchor="middle" style="font: bold 41.66666666666667px sans-serif;" >SM</text></circle></svg>'  
-  end      
+    assert HashColorAvatar.gen_avatar("Sagit Putri Lestari Harum Mewangi", [shape: "rect"]) == ~c'<svg width="100" height="100"><rect width="100" height="100" fill="pastel" /><text fill="white" x="50%" y="65%" text-anchor="middle" style="font: bold 41.66666666666667px sans-serif;" >SM</text></circle></svg>'
+  end
 
 end
