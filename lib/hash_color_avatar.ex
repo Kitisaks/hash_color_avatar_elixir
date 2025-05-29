@@ -118,7 +118,7 @@ defmodule HashColorAvatar do
   ## Examples
 
       iex> HashColorAvatar.gen_avatar("")
-      ~c{<svg width="100" height="100"><circle cx="50.0" cy="50.0" r="50.0" stroke="white" stroke-width="4" fill="pastel" /><text fill="white" x="50%" y="67%" text-anchor="middle" style="font: bold 41.66666666666667px sans-serif;" >VK</text></circle></svg>}
+      ~c{<svg width="100" height="100"><circle cx="50.0" cy="50.0" r="50.0" fill="pastel" /><text fill="white" x="50%" y="67%" text-anchor="middle" style="font: bold 41.66666666666667px sans-serif;" >VK</text></circle></svg>}
 
   ## Option
   **:color** can be used to specify background color. By default it will generate hash based on the text given. It will be unique-ish since there are only 359 possible color and there's a chance it looks similar one amongst the other. For the value you can choose "random", any color code recognized by CSS such as "teal", "tomato", also it accept hex code.
@@ -159,7 +159,7 @@ defmodule HashColorAvatar do
         ~c{<svg width="#{size}" height="#{size}"><rect width="#{size}" height="#{size}" fill="#{background_color}" /><text fill="white" x="50%" y="65%" text-anchor="middle" style="font: bold #{fontsize}px sans-serif;" >#{get_initial(text)}</text></circle></svg>}
 
       _other ->
-        ~c{<svg width="#{size}" height="#{size}"><circle cx="#{diameter}" cy="#{diameter}" r="#{diameter}" stroke="white" stroke-width="4" fill="#{background_color}" /><text fill="white" x="50%" y="67%" text-anchor="middle" style="font: bold #{fontsize}px sans-serif;" >#{get_initial(text)}</text></circle></svg>}
+        ~c{<svg width="#{size}" height="#{size}"><circle cx="#{diameter}" cy="#{diameter}" r="#{diameter}" fill="#{background_color}" /><text fill="white" x="50%" y="67%" text-anchor="middle" style="font: bold #{fontsize}px sans-serif;" >#{get_initial(text)}</text></circle></svg>}
     end
   end
 
