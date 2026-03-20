@@ -31,12 +31,35 @@ defmodule HashColorAvatarTest do
   end
 
   test "test create avatar 2 name" do
-    assert HashColorAvatar.gen_avatar("Marlyn Monroe") ==
-             ~c{<svg width="100" height="100"><circle cx="50.0" cy="50.0" r="50.0" fill="pastel" /><text fill="white" x="50%" y="67%" text-anchor="middle" style="font: bold 41.66666666666667px sans-serif;" >MM</text></circle></svg>}
+    svg = HashColorAvatar.gen_avatar("Marlyn Monroe") |> to_string()
+
+    assert String.starts_with?(svg, "<svg")
+    assert String.contains?(svg, "<circle")
+    assert String.contains?(svg, ">MM</text>")
+    assert String.contains?(svg, "dominant-baseline=\"middle\"")
+    refute String.contains?(svg, "<linearGradient")
+    refute String.contains?(svg, "feDropShadow")
   end
 
   test "test create avatar 5 name option rectangle" do
-    assert HashColorAvatar.gen_avatar("Sagit Putri Lestari Harum Mewangi", shape: "rect") ==
-             ~c{<svg width="100" height="100"><rect width="100" height="100" fill="pastel" /><text fill="white" x="50%" y="65%" text-anchor="middle" style="font: bold 41.66666666666667px sans-serif;" >SM</text></circle></svg>}
+    svg =
+      HashColorAvatar.gen_avatar("Sagit Putri Lestari Harum Mewangi", shape: "rect")
+      |> to_string()
+
+    assert String.starts_with?(svg, "<svg")
+    assert String.contains?(svg, "<rect")
+    assert String.contains?(svg, "rx=")
+    assert String.contains?(svg, ">SM</text>")
+    refute String.contains?(svg, "<circle")
+    refute String.contains?(svg, "<linearGradient")
+    refute String.contains?(svg, "feDropShadow")
+  end
+
+  test "test create avatar modern style adds gradient+shadow" do
+    svg =
+      HashColorAvatar.gen_avatar("Marlyn Monroe", style: :modern) |> to_string()
+
+    assert String.contains?(svg, "<linearGradient")
+    assert String.contains?(svg, "feDropShadow")
   end
 end

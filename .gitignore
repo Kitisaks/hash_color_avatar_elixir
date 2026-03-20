@@ -22,3 +22,20 @@ erl_crash.dump
 # Ignore package tarball (built via "mix hex.build").
 hash_color_avatar-*.tar
 
+# Local environment variables / secrets
+.env
+.env.*
+
+# Editor / OS junk
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*.tmp
+
+# Logs
+*.log
+log/
+
+.elixir_ls

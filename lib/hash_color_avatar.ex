@@ -1,11 +1,11 @@
 defmodule HashColorAvatar do
-  @default_color :pastel
   @default_shape :circle
   @default_size 100
   @default_saturation 50
   @default_value 90
-
-  import Bitwise
+  @font_family "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, 'Apple Color Emoji', 'Segoe UI Emoji'"
+  @initial_fallback "VK"
+  @max_hue 360
 
   @moduledoc """
   This is a small library to generate SVG initial avatar with unique-ish color based on string hash.
@@ -30,10 +30,45 @@ defmodule HashColorAvatar do
   """
 
   def random_color(options \\ []) do
-    seed = :rand.uniform(359)
+    <<n::unsigned-big-16>> = :crypto.strong_rand_bytes(2)
+
+    # Hue range is 0..359, but we keep 1..359 to avoid the edge case where hue=0 can repeat more.
+    seed = rem(n, @max_hue - 1) + 1
     saturation = Keyword.get(options, :saturation, @default_saturation)
     value = Keyword.get(options, :value, @default_value)
-    hsv_to_rgb(%{hue: seed, saturation: saturation, value: value}) |> rgb_to_hex
+    hsv_to_rgb(%{hue: seed, saturation: saturation, value: value}) |> rgb_to_hex()
+  end
+
+  defp normalize_hue(hue_value) when is_integer(hue_value) do
+    rem(hue_value, @max_hue)
+  end
+
+  defp normalize_hue(hue_value) when is_float(hue_value) do
+    hue_value |> trunc() |> normalize_hue()
+  end
+
+  defp normalize_hue(hue_value) do
+    hue_value |> to_string() |> String.to_integer() |> normalize_hue()
+  end
+
+  defp clamp_int(value, min, max) when is_integer(value) do
+    cond do
+      value < min -> min
+      value > max -> max
+      true -> value
+    end
+  end
+
+  defp as_float(v), do: v * 1.0
+
+  defp clamp_float(value, min, max) do
+    value = as_float(value)
+
+    cond do
+      value < min -> min
+      value > max -> max
+      true -> value
+    end
   end
 
   @doc """
@@ -53,7 +88,9 @@ defmodule HashColorAvatar do
   def set_color(hue_value, options \\ []) do
     saturation = Keyword.get(options, :saturation, @default_saturation)
     value = Keyword.get(options, :value, @default_value)
-    hsv_to_rgb(%{hue: hue_value, saturation: saturation, value: value}) |> rgb_to_hex
+
+    hsv_to_rgb(%{hue: normalize_hue(hue_value), saturation: saturation, value: value})
+    |> rgb_to_hex()
   end
 
   @doc """
@@ -66,6 +103,10 @@ defmodule HashColorAvatar do
 
   """
   def hsv_to_rgb(%{hue: hue, saturation: saturation, value: value} = _hsv) do
+    hue = normalize_hue(hue)
+    saturation = clamp_float(saturation, 0, 100)
+    value = clamp_float(value, 0, 100)
+
     h = hue / 60
     i = Float.floor(h) |> trunc()
     f = h - i
@@ -104,12 +145,11 @@ defmodule HashColorAvatar do
 
   """
   def rgb_to_hex(%{red: red, green: green, blue: blue} = _rgb) do
-    hex =
-      ((1 <<< 24) + (red <<< 16) + (green <<< 8) + blue)
-      |> Integer.to_string(16)
-      |> String.slice(1..1500)
+    r = clamp_int(red, 0, 255)
+    g = clamp_int(green, 0, 255)
+    b = clamp_int(blue, 0, 255)
 
-    "#" <> hex
+    "#" <> Base.encode16(<<r, g, b>>, case: :upper)
   end
 
   @doc """
@@ -117,49 +157,187 @@ defmodule HashColorAvatar do
 
   ## Examples
 
-      iex> HashColorAvatar.gen_avatar("")
-      ~c{<svg width="100" height="100"><circle cx="50.0" cy="50.0" r="50.0" fill="pastel" /><text fill="white" x="50%" y="67%" text-anchor="middle" style="font: bold 41.66666666666667px sans-serif;" >VK</text></circle></svg>}
+      iex> HashColorAvatar.gen_avatar("", style: :modern) |> to_string() |> String.contains?("<linearGradient")
+      true
 
   ## Option
   **:color** can be used to specify background color. By default it will generate hash based on the text given. It will be unique-ish since there are only 359 possible color and there's a chance it looks similar one amongst the other. For the value you can choose "random", any color code recognized by CSS such as "teal", "tomato", also it accept hex code.
 
   **:shape** by default is circle. You can also choose "rect" for rectangle avatar.
 
+  **:style** controls the SVG look:
+  - `:minimal` (default): solid background, no gradient/shadow filters (good for icons)
+  - `:modern`: gradient background + subtle drop shadow + highlight overlay + ring
+
   **:size** You can define how many pixel height and width. Default is 100
+
+  **:text_color** changes the initials color (default: "white").
+
+  **:font_family** changes the font family used for the initials.
 
   ## Examples
 
-      iex> HashColorAvatar.gen_avatar("Samantha Johnson Abigail", [color: "tomato", shape: "rect", size: 200])
-      ~c{<svg width="200" height="200"><rect width="200" height="200" fill="tomato" /><text fill="white" x="50%" y="65%" text-anchor="middle" style="font: bold 83.33333333333334px sans-serif;" >SA</text></circle></svg>}
+      iex> HashColorAvatar.gen_avatar("Samantha Johnson Abigail", [color: "tomato", shape: "rect", size: 200]) |> to_string() |> String.contains?("<rect")
+      true
 
 
   """
   def gen_avatar(rawtext, options \\ []) do
-    text = if rawtext == nil, do: "V K", else: rawtext
+    text = normalize_text(rawtext)
 
-    color = Keyword.get(options, :color, @default_color)
-    shape = Keyword.get(options, :shape, @default_shape)
-    size = Keyword.get(options, :size, @default_size)
+    color_opt = Keyword.get(options, :color, nil)
+    shape_opt = normalize_shape(Keyword.get(options, :shape, @default_shape))
+    size = validate_size!(Keyword.get(options, :size, @default_size))
+    style_opt = normalize_style(Keyword.get(options, :style, :minimal))
+    text_color = Keyword.get(options, :text_color, "white") |> to_string()
+    font_family_opt = Keyword.get(options, :font_family, @font_family) |> to_string()
 
+    initial = get_initial(text)
     fontsize = size / 2.4
+    half = size / 2
+    border_radius = max(ceil(size * 0.18), 10)
 
-    diameter = size / 2
+    svg_shape_and_fill =
+      case style_opt do
+        :modern ->
+          id_suffix = :erlang.phash2({text, color_opt, shape_opt, size}) |> Integer.to_string(16)
 
-    background_color =
-      case color do
-        "grey" -> "#c3c3c3"
-        "black" -> "black"
-        "random" -> random_color()
-        nil -> text |> minihash |> set_color
-        custom -> custom
+          filter_svg =
+            ~c{<filter id="shadow-#{id_suffix}" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="#{size * 0.03}" stdDeviation="#{size * 0.05}" flood-color="black" flood-opacity="0.25" /></filter>}
+
+          {defs_svg, bg_fill_attr} =
+            case color_opt do
+              nil ->
+                hue = minihash(text)
+                c1 = set_color(hue)
+                c2 = set_color(rem(hue + 28, @max_hue), value: @default_value - 12)
+
+                gradient_svg =
+                  ~c{<linearGradient id="grad-#{id_suffix}" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#{c1}" /><stop offset="100%" stop-color="#{c2}" /></linearGradient>}
+
+                {
+                  ~c{<defs>#{gradient_svg}#{filter_svg}</defs>},
+                  ~c{fill="url(#grad-#{id_suffix})" filter="url(#shadow-#{id_suffix})"}
+                }
+
+              "grey" ->
+                solid = "#c3c3c3"
+
+                {~c{<defs>#{filter_svg}</defs>},
+                 ~c{fill="#{solid}" filter="url(#shadow-#{id_suffix})"}}
+
+              "black" ->
+                solid = "#000000"
+
+                {~c{<defs>#{filter_svg}</defs>},
+                 ~c{fill="#{solid}" filter="url(#shadow-#{id_suffix})"}}
+
+              "random" ->
+                solid = random_color()
+
+                {~c{<defs>#{filter_svg}</defs>},
+                 ~c{fill="#{solid}" filter="url(#shadow-#{id_suffix})"}}
+
+              custom ->
+                solid = if is_binary(custom), do: custom, else: to_string(custom)
+
+                {~c{<defs>#{filter_svg}</defs>},
+                 ~c{fill="#{solid}" filter="url(#shadow-#{id_suffix})"}}
+            end
+
+          bg_shape =
+            case shape_opt do
+              "rect" ->
+                ~c{<rect x="0" y="0" width="#{size}" height="#{size}" rx="#{border_radius}" ry="#{border_radius}" #{bg_fill_attr} />}
+
+              _other ->
+                ~c{<circle cx="#{half}" cy="#{half}" r="#{half}" #{bg_fill_attr} />}
+            end
+
+          overlay_svg =
+            case shape_opt do
+              "rect" ->
+                ~c{<rect x="0" y="0" width="#{size}" height="#{size}" rx="#{border_radius}" ry="#{border_radius}" fill="#{text_color}" opacity="0.07" />}
+
+              _other ->
+                ~c{<circle cx="#{half}" cy="#{half}" r="#{half}" fill="#{text_color}" opacity="0.07" />}
+            end
+
+          ring_stroke_width = max(size * 0.03, 1)
+          ring_border_radius = max(border_radius - 1, 0)
+
+          ring_svg =
+            case shape_opt do
+              "rect" ->
+                ~c{<rect x="1" y="1" width="#{max(size - 2, 0)}" height="#{max(size - 2, 0)}" rx="#{ring_border_radius}" ry="#{ring_border_radius}" fill="none" stroke="#{text_color}" stroke-opacity="0.25" stroke-width="#{ring_stroke_width}" />}
+
+              _other ->
+                ~c{<circle cx="#{half}" cy="#{half}" r="#{max(half - 1, 0)}" fill="none" stroke="#{text_color}" stroke-opacity="0.25" stroke-width="#{ring_stroke_width}" />}
+            end
+
+          {defs_svg, bg_shape, overlay_svg, ring_svg}
+
+        :minimal ->
+          solid =
+            case color_opt do
+              "grey" ->
+                "#c3c3c3"
+
+              "black" ->
+                "#000000"
+
+              "random" ->
+                random_color()
+
+              nil ->
+                text |> minihash() |> set_color()
+
+              custom ->
+                if is_binary(custom), do: custom, else: to_string(custom)
+            end
+
+          bg_shape =
+            case shape_opt do
+              "rect" ->
+                ~c{<rect x="0" y="0" width="#{size}" height="#{size}" rx="#{border_radius}" ry="#{border_radius}" fill="#{solid}" />}
+
+              _other ->
+                ~c{<circle cx="#{half}" cy="#{half}" r="#{half}" fill="#{solid}" />}
+            end
+
+          # Minimal output is meant to be easy to embed and customize externally.
+          {~c{}, bg_shape, ~c{}, ~c{}}
       end
 
-    case shape do
-      "rect" ->
-        ~c{<svg width="#{size}" height="#{size}"><rect width="#{size}" height="#{size}" fill="#{background_color}" /><text fill="white" x="50%" y="65%" text-anchor="middle" style="font: bold #{fontsize}px sans-serif;" >#{get_initial(text)}</text></circle></svg>}
+    {defs_svg, bg_shape, overlay_svg, ring_svg} = svg_shape_and_fill
 
-      _other ->
-        ~c{<svg width="#{size}" height="#{size}"><circle cx="#{diameter}" cy="#{diameter}" r="#{diameter}" fill="#{background_color}" /><text fill="white" x="50%" y="67%" text-anchor="middle" style="font: bold #{fontsize}px sans-serif;" >#{get_initial(text)}</text></circle></svg>}
+    ~c{<svg width="#{size}" height="#{size}" viewBox="0 0 #{size} #{size}" xmlns="http://www.w3.org/2000/svg">#{defs_svg}#{bg_shape}#{overlay_svg}#{ring_svg}<text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" fill="#{text_color}" style="font-weight: 800; font-size: #{fontsize}px; font-family: #{font_family_opt};">#{initial}</text></svg>}
+  end
+
+  defp normalize_text(nil), do: "V K"
+  defp normalize_text(text) when is_binary(text), do: text
+  defp normalize_text(other), do: to_string(other)
+
+  defp normalize_shape("rect"), do: "rect"
+  defp normalize_shape(:rect), do: "rect"
+  defp normalize_shape(_other), do: "circle"
+
+  defp normalize_style(:modern), do: :modern
+  defp normalize_style("modern"), do: :modern
+  defp normalize_style(:minimal), do: :minimal
+  defp normalize_style("minimal"), do: :minimal
+  defp normalize_style(_other), do: :minimal
+
+  defp validate_size!(size) when is_float(size), do: validate_size!(trunc(size))
+
+  defp validate_size!(size) do
+    cond do
+      is_integer(size) and size > 0 ->
+        size
+
+      true ->
+        raise ArgumentError,
+              "expected :size to be a positive integer, got: #{inspect(size)}"
     end
   end
 
@@ -181,7 +359,7 @@ defmodule HashColorAvatar do
 
     case Enum.count(clean_character) do
       0 ->
-        "VK"
+        @initial_fallback
 
       1 ->
         clean_character |> List.first() |> String.at(0) |> String.upcase()
@@ -194,44 +372,16 @@ defmodule HashColorAvatar do
   end
 
   @doc false
-  # This function will generate "hash" for any kind of string and spitting integer
-  # between 1 to 359. This the possible Hue range in color
+  # Generate a stable integer hue in range 0..359 from any string.
   defp minihash(string) do
-    :crypto.hash(:md5, string)
-    |> Base.encode16()
-    |> String.slice(0..3)
-    |> String.graphemes()
-    |> string_to_int
-    |> rem(360)
-  end
-
-  @doc false
-  # This function is private function to convert part of hashed string into interger.
-  defp string_to_int(list) do
-    Enum.reduce(list, 1, fn x, acc ->
-      case Integer.parse(x) do
-        {0, _} -> 1 * acc
-        {number, _} -> number * acc
-        :error -> letter_to_integer(x) * acc
-      end
-    end)
+    hash = :crypto.hash(:md5, string)
+    <<first4::binary-size(4), _rest::binary>> = hash
+    value = :binary.decode_unsigned(first4)
+    rem(value, @max_hue)
   end
 
   @doc false
   defp get_rgb_color(color) do
     (color * 255 / 100) |> trunc()
-  end
-
-  @doc false
-  defp letter_to_integer(letter) do
-    case letter do
-      "A" -> 1
-      "B" -> 2
-      "C" -> 3
-      "D" -> 4
-      "E" -> 5
-      "F" -> 6
-      _other -> 1
-    end
   end
 end
