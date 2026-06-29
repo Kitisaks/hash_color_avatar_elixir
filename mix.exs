@@ -31,6 +31,6 @@ defmodule HashColorAvatar.MixProject do
   end
 
   defp deps do
-    [{:earmark, ">= 0.0.0", only: :dev}, {:ex_doc, ">= 0.0.0", only: :dev}]
+    [{:ex_doc, "~> 0.34", only: :dev, runtime: false, warn_if_outdated: true}]
   end
 end

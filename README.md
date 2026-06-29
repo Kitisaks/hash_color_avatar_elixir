@@ -1,16 +1,16 @@
 # HashColorAvatar
 
-Small Elixir library to generate deterministic, unique-ish SVG avatars (initials) from a string.
+Small Elixir library to generate deterministic, modern SVG avatars (initials) from a string.
 
 ## Features
 
 - Deterministic initials: `get_initial/1` turns a name into up to 2 characters (first + last).
-- Deterministic color: when you don’t pass `:color`, the background is derived from the input string hash.
-- Optional modern SVG styling (set `style: :modern`):
-  - Linear gradient background
+- Rich hash palette: hue, saturation, and brightness are all derived from the input string.
+- Modern SVG output by default:
+  - Diagonal linear gradient background
   - Subtle drop shadow
-  - Rounded highlight overlay
-  - Subtle ring stroke
+  - Highlight overlay and ring stroke
+  - Optically centered initials with auto contrast (light or dark text)
 - Utility functions:
   - `random_color/1` (HSV -> RGB -> hex)
   - `set_color/2` (convert a hue value to hex)
@@ -51,42 +51,41 @@ iex> HashColorAvatar.get_initial("")
 
 ### `gen_avatar/2`
 
-Generates an SVG avatar containing the initials and a background (minimal by default).
-
-Important: `gen_avatar/2` returns a **charlist** containing the SVG. If you need a binary string:
+Generates an SVG avatar containing the initials and a background. Returns a **binary** string.
 
 ```elixir
-svg = HashColorAvatar.gen_avatar("Marlyn Monroe") |> to_string()
+svg = HashColorAvatar.gen_avatar("Marlyn Monroe")
 ```
 
 Options:
 
 - `:color`
-  - `nil` (default): derive a background color from the name hash
+  - `nil` (default): derive a background palette from the name hash
   - `"grey"`: solid `#c3c3c3`
   - `"black"`: solid `#000000`
   - `"random"`: random HSV-derived solid color
   - any other string: treated as a CSS/hex color (used as-is)
 - `:style`
-  - default `:minimal`: solid background (no gradients, no shadow filters) for easy icon embedding
-  - `:modern`: gradient background + subtle drop shadow + highlight + ring
+  - default `:modern`: gradient, shadow, highlight, and ring
+  - `:minimal`: solid background only (best for embedding as a simple icon)
 - `:shape`
-  - default: `"circle"`
-  - `"rect"`: rounded rectangle background (ring appears in `style: :modern`)
+  - default: `:circle`
+  - `:rect`: rounded rectangle background
 - `:size`
   - positive integer SVG size in pixels (default `100`)
 - `:text_color`
-  - default: `"white"` (customize the initials color)
+  - when omitted, initials color is chosen automatically for contrast
+  - pass `"white"`, `"#1e293b"`, etc. to override
 - `:font_family`
-  - default: a system UI font stack (customize the initials font family)
+  - default: a system UI font stack
 
 Examples:
 
 ```elixir
-iex> HashColorAvatar.gen_avatar("Marlyn Monroe") |> to_string() |> String.contains?("<svg")
+iex> HashColorAvatar.gen_avatar("Marlyn Monroe") |> String.contains?("<linearGradient")
 true
 
-iex> HashColorAvatar.gen_avatar("Sagit Putri Lestari Harum Mewangi", shape: "rect") |> to_string() |> String.contains?("<rect")
+iex> HashColorAvatar.gen_avatar("Sagit Putri Lestari Harum Mewangi", shape: :rect) |> String.contains?("<rect")
 true
 ```
 
@@ -117,4 +116,3 @@ Options:
 iex> HashColorAvatar.set_color(12)
 "#E58972"
 ```
-
