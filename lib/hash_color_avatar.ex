@@ -189,7 +189,7 @@ defmodule HashColorAvatar do
   def get_initial(name) do
     parts =
       name
-      |> then(&Regex.replace(~r/[\p{P}\p{S}\p{C}\p{N}]+/, &1, " "))
+      |> then(&Regex.replace(~r/[\p{P}\p{S}\p{C}\p{N}]+/u, &1, " "))
       |> String.split(~r/\s+/, trim: true)
 
     case parts do

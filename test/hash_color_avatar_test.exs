@@ -14,6 +14,19 @@ defmodule HashColorAvatarTest do
     assert HashColorAvatar.get_initial("guruh soekarno") == "GS"
   end
 
+  test "generate initial from unicode names" do
+    assert HashColorAvatar.get_initial("Дмитрий") == "Д"
+    assert HashColorAvatar.get_initial("Иван Петров") == "ИП"
+    assert HashColorAvatar.get_initial("José García") == "JG"
+  end
+
+  test "gen_avatar with unicode names produces valid utf-8" do
+    svg = HashColorAvatar.gen_avatar("Иван Петров", style: :minimal)
+
+    assert String.valid?(svg)
+    assert String.contains?(svg, ">ИП</text>")
+  end
+
   test "generate initial three name" do
     assert HashColorAvatar.get_initial("guruh soekarno putra") == "GP"
   end
