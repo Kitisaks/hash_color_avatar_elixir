@@ -1,11 +1,13 @@
 defmodule HashColorAvatar do
   @moduledoc """
-  Generate deterministic SVG initial avatars with hash-derived pastel colors.
+  Generate deterministic SVG initial avatars.
 
-  Colors are derived from the input string so the same name always produces the
-  same avatar. `random_color/1` and `set_color/2` are available for ad-hoc colors.
+  Hash colors are a fixed cool-neutral palette. Every swatch keeps white initials
+  at WCAG AA (4.5:1) and stays visible on Tatex light paper (`#f4f4f6`) and dark
+  chrome (`#262830`). The same name always maps to the same swatch.
 
-  `gen_avatar/2` returns an SVG **binary** string.
+  `gen_avatar/2` returns an SVG binary. `:minimal` is a flat disc for lists and
+  headers. `:modern` adds a hairline rim and still skips filters and gradients.
   """
 
   @default_shape :circle
@@ -13,11 +15,31 @@ defmodule HashColorAvatar do
   @default_style :modern
   @default_saturation 50
   @default_value 90
-  @font_family "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
+  @font_family "Inter, ui-sans-serif, system-ui, sans-serif"
   @initial_fallback "VK"
   @max_hue 360
-  @dark_text "#1e293b"
+  @dark_text "#16171d"
   @light_text "#ffffff"
+  @noise_pattern ~r/[\p{P}\p{S}\p{C}\p{N}]+/u
+  @split_pattern ~r/\s+/u
+
+  # Luminance sits in a narrow band: white initials stay >= 4.5:1, and the disc
+  # stays >= 3:1 against Tatex gray-800 (`#262830`) in dark mode.
+  @palette {
+    {"#AC5D5D", %{red: 172, green: 93, blue: 93}},
+    {"#8E6D4D", %{red: 142, green: 109, blue: 77}},
+    {"#767640", %{red: 118, green: 118, blue: 64}},
+    {"#607C43", %{red: 96, green: 124, blue: 67}},
+    {"#458045", %{red: 69, green: 128, blue: 69}},
+    {"#447F62", %{red: 68, green: 127, blue: 98}},
+    {"#437C7C", %{red: 67, green: 124, blue: 124}},
+    {"#53769A", %{red: 83, green: 118, blue: 154}},
+    {"#6969C3", %{red: 105, green: 105, blue: 195}},
+    {"#8B61B4", %{red: 139, green: 97, blue: 180}},
+    {"#A258A2", %{red: 162, green: 88, blue: 162}},
+    {"#A85A81", %{red: 168, green: 90, blue: 129}}
+  }
+  @palette_size tuple_size(@palette)
 
   @doc """
   Returns a random pastel hex color.
@@ -43,6 +65,11 @@ defmodule HashColorAvatar do
 
   @doc """
   Converts a hue value to a hex color.
+
+  ## Options
+
+    * `:saturation` - HSV saturation (default `#{@default_saturation}`)
+    * `:value` - HSV value/brightness (default `#{@default_value}`)
 
   ## Examples
 
@@ -122,21 +149,23 @@ defmodule HashColorAvatar do
   @doc """
   Generates an SVG avatar for the given text.
 
-  The background color is derived from a hash of the text unless `:color` is set.
-  Initials are optically centered with size tuned for one or two characters.
+  The background is chosen from the hash palette unless `:color` is set.
+  Initials use Inter when the host page loads it, with the baseline set so
+  uppercase caps sit on the optical center. Output is a flat SVG: no filters,
+  no gradients.
 
   ## Options
 
-    * `:color` - `nil` (hash), `"grey"`, `"black"`, `"random"`, or any CSS/hex color
-    * `:style` - `:modern` (default) or `:minimal`
+    * `:color` - `nil` (hash palette), `"grey"`, `"black"`, `"random"`, or a hex/CSS color
+    * `:style` - `:modern` (default, flat fill plus hairline rim) or `:minimal` (fill only)
     * `:shape` - `:circle` (default) or `:rect`
     * `:size` - positive integer pixel size (default `100`)
     * `:text_color` - initials color; auto-selected for contrast when omitted
-    * `:font_family` - font stack for initials
+    * `:font_family` - font stack for initials (default Inter, then system UI)
 
   ## Examples
 
-      iex> HashColorAvatar.gen_avatar("", style: :modern) |> String.contains?("<linearGradient")
+      iex> HashColorAvatar.gen_avatar("", style: :modern) |> String.contains?(">VK</text>")
       true
 
       iex> HashColorAvatar.gen_avatar("Samantha Johnson Abigail", color: "tomato", shape: :rect, size: 200) |> String.contains?("<rect")
@@ -146,19 +175,13 @@ defmodule HashColorAvatar do
   def gen_avatar(rawtext, options \\ []) do
     text = normalize_text(rawtext)
     initial = get_initial(text)
-
     color_opt = Keyword.get(options, :color)
     shape = normalize_shape(Keyword.get(options, :shape, @default_shape))
     size = validate_size!(Keyword.get(options, :size, @default_size))
     style = normalize_style(Keyword.get(options, :style, @default_style))
     font_family = Keyword.get(options, :font_family, @font_family) |> to_string()
 
-    half = size / 2
-    border_radius = max(ceil(size * 0.2), 8)
-    id_suffix = Integer.to_string(:erlang.phash2({text, color_opt, shape, size, style}), 16)
-
-    {defs, layers, sample_rgb} =
-      build_layers(text, color_opt, shape, size, half, border_radius, style, id_suffix)
+    {hex, sample_rgb} = resolve_fill(color_opt, text)
 
     text_color =
       case Keyword.get(options, :text_color) do
@@ -166,12 +189,37 @@ defmodule HashColorAvatar do
         custom -> to_string(custom)
       end
 
-    {font_size, letter_spacing} = text_metrics(initial, size)
+    {font_size, baseline, tracking} = text_layout(initial, size)
+    radius = corner_radius(size)
+    half = size / 2
 
-    text_svg =
-      ~s(<text x="#{half}" y="#{half}" text-anchor="middle" dominant-baseline="central" fill="#{text_color}" style="font-weight:600;font-size:#{font_size}px;font-family:#{font_family};letter-spacing:#{letter_spacing};user-select:none">#{initial}</text>)
+    layers = [shape_element(shape, size, half, radius, xml_escape(hex))]
 
-    ~s(<svg width="#{size}" height="#{size}" viewBox="0 0 #{size} #{size}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="#{initial} avatar">#{defs}#{layers}#{text_svg}</svg>)
+    layers =
+      if style == :modern do
+        [layers, rim_element(shape, size, half, radius)]
+      else
+        layers
+      end
+
+    svg = [
+      ~s(<svg width="),
+      Integer.to_string(size),
+      ~s(" height="),
+      Integer.to_string(size),
+      ~s(" viewBox="0 0 ),
+      Integer.to_string(size),
+      " ",
+      Integer.to_string(size),
+      ~s(" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="),
+      xml_escape(initial),
+      ~s( avatar">),
+      layers,
+      text_element(initial, half, baseline, font_size, tracking, text_color, font_family),
+      "</svg>"
+    ]
+
+    IO.iodata_to_binary(svg)
   end
 
   @doc """
@@ -189,8 +237,8 @@ defmodule HashColorAvatar do
   def get_initial(name) do
     parts =
       name
-      |> then(&Regex.replace(~r/[\p{P}\p{S}\p{C}\p{N}]+/u, &1, " "))
-      |> String.split(~r/\s+/, trim: true)
+      |> then(&Regex.replace(@noise_pattern, &1, " "))
+      |> String.split(@split_pattern, trim: true)
 
     case parts do
       [] ->
@@ -204,134 +252,114 @@ defmodule HashColorAvatar do
     end
   end
 
-  defp build_layers(text, color_opt, shape, size, half, border_radius, style, id_suffix) do
-    case style do
-      :modern -> build_modern_layers(text, color_opt, shape, size, half, border_radius, id_suffix)
-      :minimal -> build_minimal_layers(text, color_opt, shape, size, half, border_radius)
+  defp resolve_fill(nil, text), do: palette_color(text)
+  defp resolve_fill("grey", _text), do: {"#C3C3C3", %{red: 195, green: 195, blue: 195}}
+  defp resolve_fill("black", _text), do: {"#000000", %{red: 0, green: 0, blue: 0}}
+
+  defp resolve_fill("random", _text) do
+    hex = random_color()
+    {_kind, hex, rgb} = hex_to_rgb_tuple(hex)
+    {hex, rgb}
+  end
+
+  defp resolve_fill(color, _text) when is_binary(color) do
+    {color, hex_or_named_to_rgb(color)}
+  end
+
+  defp resolve_fill(color, text), do: resolve_fill(to_string(color), text)
+
+  defp palette_color(text) do
+    elem(@palette, rem(:erlang.crc32(text), @palette_size))
+  end
+
+  defp shape_element("rect", size, _half, radius, fill) do
+    radius = num(radius)
+
+    ~s(<rect x="0" y="0" width="#{size}" height="#{size}" rx="#{radius}" ry="#{radius}" fill="#{fill}"/>)
+  end
+
+  defp shape_element(_circle, _size, half, _radius, fill) do
+    half = num(half)
+    ~s(<circle cx="#{half}" cy="#{half}" r="#{half}" fill="#{fill}"/>)
+  end
+
+  defp rim_element("rect", size, _half, radius) do
+    inset = max(size * 0.035, 1)
+    inner = num(max(size - inset * 2, 0))
+    inner_radius = num(max(radius - inset, 0))
+    inset = num(inset)
+
+    ~s(<rect x="#{inset}" y="#{inset}" width="#{inner}" height="#{inner}" rx="#{inner_radius}" ry="#{inner_radius}" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="#{inset}"/>)
+  end
+
+  defp rim_element(_circle, _size, half, _radius) do
+    inset = max(half * 0.06, 1)
+    radius = num(max(half - inset / 2, 0))
+    half = num(half)
+    inset = num(inset)
+
+    ~s(<circle cx="#{half}" cy="#{half}" r="#{radius}" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="#{inset}"/>)
+  end
+
+  defp text_element(initial, x, y, font_size, tracking, text_color, font_family) do
+    [
+      ~s(<text x="),
+      num(x),
+      ~s(" y="),
+      num(y),
+      ~s(" text-anchor="middle" fill="),
+      xml_escape(text_color),
+      ~s(" font-family="),
+      xml_escape(font_family),
+      ~s(" font-weight="600" font-size="),
+      num(font_size),
+      ~s(" letter-spacing="),
+      tracking,
+      ~s(">),
+      xml_escape(initial),
+      "</text>"
+    ]
+  end
+
+  defp text_layout(initial, size) do
+    single? = String.length(initial) == 1
+    font_size = size * if(single?, do: 0.42, else: 0.34)
+    font_size = Float.round(font_size, 2)
+    # Inter cap-height is ~0.72em. Shift the baseline so the caps, not the em box, center.
+    baseline = Float.round(size / 2 + font_size * 0.36, 2)
+    tracking = if single?, do: "0", else: "-0.03em"
+    {font_size, baseline, tracking}
+  end
+
+  defp corner_radius(size), do: max(size * 0.22, 4)
+
+  defp readable_text_color(%{red: red, green: green, blue: blue}) do
+    fill = {red, green, blue}
+    light = contrast_ratio(fill, {255, 255, 255})
+    dark = contrast_ratio(fill, {22, 23, 29})
+    if light >= dark, do: @light_text, else: @dark_text
+  end
+
+  defp contrast_ratio(a, b) do
+    hi = relative_luminance(a)
+    lo = relative_luminance(b)
+    {hi, lo} = if hi > lo, do: {hi, lo}, else: {lo, hi}
+    (hi + 0.05) / (lo + 0.05)
+  end
+
+  defp relative_luminance({red, green, blue}) do
+    0.2126 * channel_luminance(red) + 0.7152 * channel_luminance(green) +
+      0.0722 * channel_luminance(blue)
+  end
+
+  defp channel_luminance(channel) do
+    value = channel / 255
+
+    if value <= 0.04045 do
+      value / 12.92
+    else
+      :math.pow((value + 0.055) / 1.055, 2.4)
     end
-  end
-
-  defp build_modern_layers(text, color_opt, shape, size, half, border_radius, id_suffix) do
-    filter =
-      ~s(<filter id="shadow-#{id_suffix}" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="#{size * 0.03}" stdDeviation="#{size * 0.04}" flood-color="#000" flood-opacity="0.2"/></filter>)
-
-    {gradient_or_fill, sample_rgb} =
-      case resolve_color(color_opt, text) do
-        {:hash, primary, secondary} ->
-          c1 = palette_to_hex(primary)
-          c2 = palette_to_hex(secondary)
-
-          gradient =
-            ~s(<linearGradient id="grad-#{id_suffix}" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#{c1}"/><stop offset="100%" stop-color="#{c2}"/></linearGradient>)
-
-          sample = average_rgb(hsv_to_rgb(primary), hsv_to_rgb(secondary))
-          {gradient, {:gradient, "url(#grad-#{id_suffix})", sample}}
-
-        {:solid, hex, rgb} ->
-          {nil, {:solid, hex, rgb}}
-      end
-
-    defs =
-      case gradient_or_fill do
-        nil -> ~s(<defs>#{filter}</defs>)
-        gradient -> ~s(<defs>#{gradient}#{filter}</defs>)
-      end
-
-    {fill, sample} =
-      case sample_rgb do
-        {:gradient, fill, rgb} -> {fill, rgb}
-        {:solid, fill, rgb} -> {fill, rgb}
-      end
-
-    fill_attr = "fill=\"#{fill}\" filter=\"url(#shadow-#{id_suffix})\""
-    bg = shape_element(shape, size, half, border_radius, fill_attr)
-
-    overlay_fill =
-      shape_element(shape, size, half, border_radius, ~s(fill="#{@light_text}" opacity="0.08"))
-
-    ring = ring_element(shape, size, half, border_radius)
-
-    {defs, bg <> overlay_fill <> ring, sample}
-  end
-
-  defp build_minimal_layers(text, color_opt, shape, size, half, border_radius) do
-    {_kind, hex, rgb} =
-      case resolve_color(color_opt, text) do
-        {:hash, primary, _secondary} -> {:solid, palette_to_hex(primary), hsv_to_rgb(primary)}
-        {:solid, hex, rgb} -> {:solid, hex, rgb}
-      end
-
-    bg = shape_element(shape, size, half, border_radius, ~s(fill="#{hex}"))
-    {"", bg, rgb}
-  end
-
-  defp resolve_color(nil, text) do
-    primary = hash_palette(text)
-    offset = 20 + rem(:erlang.phash2(text, @max_hue), 32)
-
-    secondary_value =
-      max(primary.value - 6 - rem(div(:erlang.phash2(text <> ":v", 64), 1), 8), 76)
-
-    secondary = %{primary | hue: rem(primary.hue + offset, @max_hue), value: secondary_value}
-    {:hash, primary, secondary}
-  end
-
-  defp resolve_color("grey", _text), do: {:solid, "#c3c3c3", %{red: 195, green: 195, blue: 195}}
-  defp resolve_color("black", _text), do: {:solid, "#000000", %{red: 0, green: 0, blue: 0}}
-  defp resolve_color("random", _text), do: random_color() |> hex_to_rgb_tuple()
-
-  defp resolve_color(color, _text) when is_binary(color),
-    do: {:solid, color, hex_or_named_to_rgb(color)}
-
-  defp resolve_color(color, _text), do: resolve_color(to_string(color), nil)
-
-  defp shape_element("rect", size, _half, border_radius, attrs) do
-    ~s(<rect x="0" y="0" width="#{size}" height="#{size}" rx="#{border_radius}" ry="#{border_radius}" #{attrs}/>)
-  end
-
-  defp shape_element(_circle, _size, half, _border_radius, attrs) do
-    ~s(<circle cx="#{half}" cy="#{half}" r="#{half}" #{attrs}/>)
-  end
-
-  defp ring_element("rect", size, _half, border_radius) do
-    inset = max(size * 0.02, 1)
-    inner_radius = max(border_radius - inset, 0)
-    inner_size = max(size - inset * 2, 0)
-
-    ~s(<rect x="#{inset}" y="#{inset}" width="#{inner_size}" height="#{inner_size}" rx="#{inner_radius}" ry="#{inner_radius}" fill="none" stroke="#{@light_text}" stroke-opacity="0.22" stroke-width="#{inset}"/>)
-  end
-
-  defp ring_element(_circle, _size, half, _border_radius) do
-    inset = max(half * 0.04, 1)
-
-    ~s(<circle cx="#{half}" cy="#{half}" r="#{max(half - inset, 0)}" fill="none" stroke="#{@light_text}" stroke-opacity="0.22" stroke-width="#{inset}"/>)
-  end
-
-  defp text_metrics(initial, size) do
-    case String.length(initial) do
-      1 -> {Float.round(size * 0.44, 2), "0"}
-      _ -> {Float.round(size * 0.36, 2), "#{Float.round(size * 0.02, 2)}px"}
-    end
-  end
-
-  defp hash_palette(text) do
-    seed = :erlang.phash2(text, 1_000_000_000)
-    hue = rem(seed, @max_hue)
-    saturation = @default_saturation + rem(div(seed, @max_hue), 10)
-    value = @default_value - rem(div(seed, @max_hue * 10), 7)
-    %{hue: hue, saturation: saturation, value: value}
-  end
-
-  defp palette_to_hex(palette), do: palette |> hsv_to_rgb() |> rgb_to_hex()
-
-  defp readable_text_color(rgb) do
-    luminance = 0.2126 * rgb.red + 0.7152 * rgb.green + 0.0722 * rgb.blue
-
-    if luminance > 150, do: @dark_text, else: @light_text
-  end
-
-  defp average_rgb(a, b) do
-    %{red: div(a.red + b.red, 2), green: div(a.green + b.green, 2), blue: div(a.blue + b.blue, 2)}
   end
 
   defp hex_to_rgb_tuple("#" <> hex) when byte_size(hex) == 6 do
@@ -348,7 +376,7 @@ defmodule HashColorAvatar do
 
   defp hex_or_named_to_rgb(_named), do: %{red: 128, green: 128, blue: 128}
 
-  defp normalize_hue(hue) when is_integer(hue), do: rem(hue, @max_hue)
+  defp normalize_hue(hue) when is_integer(hue), do: Integer.mod(hue, @max_hue)
   defp normalize_hue(hue) when is_float(hue), do: hue |> trunc() |> normalize_hue()
   defp normalize_hue(hue), do: hue |> to_string() |> String.to_integer() |> normalize_hue()
 
@@ -391,4 +419,25 @@ defmodule HashColorAvatar do
   end
 
   defp rgb_channel(color), do: trunc(color * 255 / 100)
+
+  defp xml_escape(value) do
+    value
+    |> to_string()
+    |> String.replace("&", "&amp;")
+    |> String.replace("<", "&lt;")
+    |> String.replace(">", "&gt;")
+    |> String.replace("\"", "&quot;")
+  end
+
+  defp num(value) when is_integer(value), do: Integer.to_string(value)
+
+  defp num(value) when is_float(value) do
+    rounded = Float.round(value, 2)
+
+    if rounded == trunc(rounded) do
+      Integer.to_string(trunc(rounded))
+    else
+      :erlang.float_to_binary(rounded, [:compact, decimals: 2])
+    end
+  end
 end

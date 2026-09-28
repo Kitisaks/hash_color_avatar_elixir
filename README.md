@@ -1,16 +1,18 @@
 # HashColorAvatar
 
-Small Elixir library to generate deterministic, modern SVG avatars (initials) from a string.
+Small Elixir library to generate deterministic SVG initial avatars from a string.
+
+The hash palette is tuned for the Tatex admin: white initials stay at WCAG AA, and each disc stays visible on working paper (`#f4f4f6`) and dark chrome (`#262830`). Output is flat SVG (no filters, no gradients) so a member list can render dozens of them without extra paint cost. Initials use Inter, then the system UI stack, matching the Tatex type ramp.
 
 ## Features
 
 - Deterministic initials: `get_initial/1` turns a name into up to 2 characters (first + last).
-- Rich hash palette: hue, saturation, and brightness are all derived from the input string.
-- Modern SVG output by default:
-  - Diagonal linear gradient background
-  - Subtle drop shadow
-  - Highlight overlay and ring stroke
-  - Optically centered initials with auto contrast (light or dark text)
+- Twelve-swatch hash palette. The same name always picks the same color.
+- Flat SVG:
+  - `:minimal` is a solid disc (the variant Tatex embeds at 32, 40, 48, 120, and 160px)
+  - `:modern` adds a hairline rim and still skips drop shadows and gradients
+  - Uppercase initials are optically centered
+  - Text color is chosen for contrast when `:text_color` is omitted
 - Utility functions:
   - `random_color/1` (HSV -> RGB -> hex)
   - `set_color/2` (convert a hue value to hex)
@@ -22,7 +24,7 @@ If [available in Hex](https://hex.pm/docs/publish), add `hash_color_avatar` to y
 ```elixir
 def deps do
   [
-    {:hash_color_avatar, "~> 0.1.0"}
+    {:hash_color_avatar, "~> 0.2.0"}
   ]
 end
 ```
@@ -60,14 +62,14 @@ svg = HashColorAvatar.gen_avatar("Marlyn Monroe")
 Options:
 
 - `:color`
-  - `nil` (default): derive a background palette from the name hash
+  - `nil` (default): pick a background from the contrast-safe hash palette
   - `"grey"`: solid `#c3c3c3`
   - `"black"`: solid `#000000`
   - `"random"`: random HSV-derived solid color
   - any other string: treated as a CSS/hex color (used as-is)
 - `:style`
-  - default `:modern`: gradient, shadow, highlight, and ring
-  - `:minimal`: solid background only (best for embedding as a simple icon)
+  - default `:modern`: solid fill plus a hairline rim
+  - `:minimal`: solid fill only (what Tatex uses in lists and the header)
 - `:shape`
   - default: `:circle`
   - `:rect`: rounded rectangle background
@@ -77,12 +79,12 @@ Options:
   - when omitted, initials color is chosen automatically for contrast
   - pass `"white"`, `"#1e293b"`, etc. to override
 - `:font_family`
-  - default: a system UI font stack
+  - default: `Inter, ui-sans-serif, system-ui, sans-serif`
 
 Examples:
 
 ```elixir
-iex> HashColorAvatar.gen_avatar("Marlyn Monroe") |> String.contains?("<linearGradient")
+iex> HashColorAvatar.gen_avatar("Marlyn Monroe", style: :minimal) |> String.contains?(">MM</text>")
 true
 
 iex> HashColorAvatar.gen_avatar("Sagit Putri Lestari Harum Mewangi", shape: :rect) |> String.contains?("<rect")

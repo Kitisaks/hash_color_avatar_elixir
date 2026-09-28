@@ -1,0 +1,23 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "createdAt": "2026-09-28T07:06:38.146Z",
+        "reason": "Tatex DESIGN.md specifies Inter as the only sans in the admin; the preview matches that type ramp."
+      },
+      {
+        "rule": "low-contrast",
+        "value": "*",
+        "files": [
+          "examples/preview.html"
+        ],
+        "createdAt": "2026-09-28T07:07:10.587Z",
+        "reason": "Agent: preview.html is a fixture of generated SVG avatars. The detector treats initials as body color on the section background and misses the disc fill; measured disc contrast is at least 4.5:1."
+      }
+    ]
+  }
+}

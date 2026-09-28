@@ -39,3 +39,9 @@ hash_color_avatar-*.tar
 log/
 
 .elixir_ls
+
+# Local knowledge graph (regenerate with graphify)
+/graphify-out/
+
+# Design-hook session cache
+.impeccable/hook.cache.json
